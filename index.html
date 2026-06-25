@@ -3006,8 +3006,20 @@
         let autoMarkConfirmTimeout = null;
 
         btnAutoMark.addEventListener('click', async () => {
-            if (!currentFile || !currentVideoId) {
+            if (!currentVideoId) {
                 btnAutoMark.textContent = '⚠️ Carregue um vídeo primeiro';
+                setTimeout(() => { btnAutoMark.textContent = '🎵 Auto'; }, 3000);
+                return;
+            }
+
+            if (appPlayer.isYoutube) {
+                btnAutoMark.textContent = '⚠️ Indisponível para YouTube';
+                setTimeout(() => { btnAutoMark.textContent = '🎵 Auto'; }, 3000);
+                return;
+            }
+
+            if (!currentAudioBuffer && !currentFile) {
+                btnAutoMark.textContent = '⚠️ Áudio indisponível';
                 setTimeout(() => { btnAutoMark.textContent = '🎵 Auto'; }, 3000);
                 return;
             }
