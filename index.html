@@ -707,7 +707,6 @@
                 📁 Selecionar Vídeo
                 <input type="file" id="videoUpload" accept="video/*">
             </label>
-            <button onclick="promptOpenURL()" class="btn-project" style="margin: 0; flex: 1 1 auto; padding: 10px 14px; font-size: 13px; font-weight: bold; background-color: #333; color: white; border: 1px solid #444; border-radius: 6px; cursor: pointer; white-space: nowrap;">🌐 Abrir URL</button>
             <input type="file" id="projectUpload" accept=".json" style="display: none;">
             <button onclick="openProject()" class="btn-project" style="margin: 0; flex: 1 1 auto; padding: 10px 14px; font-size: 13px; font-weight: bold; background-color: #333; color: white; border: 1px solid #444; border-radius: 6px; cursor: pointer; white-space: nowrap;">📂 Abrir projeto</button>
             <button onclick="saveProject()" class="btn-project" style="margin: 0; flex: 1 1 auto; padding: 10px 14px; font-size: 13px; font-weight: bold; background-color: #333; color: white; border: 1px solid #444; border-radius: 6px; cursor: pointer; white-space: nowrap;">💾 Salvar projeto</button>
@@ -768,8 +767,6 @@
                 <p class="scroll-hint" id="videoTitleHint" style="margin-bottom: 2px;">Ativo: Nenhum vídeo carregado</p>
                 <div class="video-wrapper" id="videoContainer">
                     <video id="videoPlayer" controls playsinline></video>
-                    <div id="ytPlayerContainer" style="display: none; width: 100%; aspect-ratio: 16 / 9; transform-origin: center center; transition: transform 0.1s ease-out;"></div>
-                    <div id="ytTouchOverlay" style="display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 8; background: transparent; cursor: pointer;"></div>
                     <!-- Floating step overlays (Left and Right) -->
                     <div id="stepOverlayLeft" style="position: absolute; bottom: 15px; left: 15px; transform: translate(0, 10px) scale(0.95); background: rgba(33, 150, 243, 0.85); border: 1.5px solid #2196F3; color: #fff; padding: 6px 14px; border-radius: 8px; font-weight: bold; font-size: 16px; pointer-events: none; opacity: 0; transition: opacity 0.15s ease, transform 0.15s ease; z-index: 10; display: flex; align-items: center; gap: 6px; box-shadow: 0 4px 10px rgba(0,0,0,0.5);">
                         <span>👣</span>
@@ -881,191 +878,8 @@
             }
         });
 
-        // ======== ELEMENTOS DO DOM E PLAYER UNIFICADO ========
-        const html5Video = document.getElementById('videoPlayer');
-        const ytPlayerContainer = document.getElementById('ytPlayerContainer');
-        const ytTouchOverlay = document.getElementById('ytTouchOverlay');
-
-        let ytApiReady = false;
-
-        // Callback da API do YouTube
-        window.onYouTubeIframeAPIReady = function() {
-            ytApiReady = true;
-        };
-
-        // Carrega o script do YouTube se ainda não foi carregado
-        if (typeof YT === 'undefined' || typeof YT.Player === 'undefined') {
-            const tag = document.createElement('script');
-            tag.src = "https://www.youtube.com/iframe_api";
-            const firstScriptTag = document.getElementsByTagName('script')[0];
-            firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
-        } else {
-            ytApiReady = true;
-        }
-
-        const appPlayer = {
-            isYoutube: false,
-            ytPlayer: null,
-            videoElement: html5Video,
-            listeners: {},
-
-            init() {
-                const events = ['loadedmetadata', 'loadeddata', 'seeked', 'timeupdate', 'play', 'pause', 'error'];
-                events.forEach(event => {
-                    this.videoElement.addEventListener(event, (e) => {
-                        if (!this.isYoutube) {
-                            this.trigger(event, e);
-                        }
-                    });
-                });
-
-                // Clique no overlay de toque do YouTube para pausar/reproduzir
-                ytTouchOverlay.addEventListener('click', (e) => {
-                    if (typeof isDragging !== 'undefined' && isDragging) return;
-                    if (this.paused) {
-                        this.play();
-                    } else {
-                        this.pause();
-                    }
-                });
-            },
-
-            addEventListener(event, callback) {
-                if (!this.listeners[event]) this.listeners[event] = [];
-                this.listeners[event].push(callback);
-            },
-
-            trigger(event, data) {
-                if (this.listeners[event]) {
-                    this.listeners[event].forEach(cb => {
-                        try { cb(data); } catch(err) { console.error("Erro no callback do evento " + event, err); }
-                    });
-                }
-            },
-
-            play() {
-                if (this.isYoutube) {
-                    if (this.ytPlayer && typeof this.ytPlayer.playVideo === 'function') {
-                        this.ytPlayer.playVideo();
-                    }
-                } else {
-                    return this.videoElement.play();
-                }
-            },
-
-            pause() {
-                if (this.isYoutube) {
-                    if (this.ytPlayer && typeof this.ytPlayer.pauseVideo === 'function') {
-                        this.ytPlayer.pauseVideo();
-                    }
-                } else {
-                    this.videoElement.pause();
-                }
-            },
-
-            load() {
-                if (!this.isYoutube) {
-                    this.videoElement.load();
-                }
-            },
-
-            get currentTime() {
-                if (this.isYoutube) {
-                    return this.ytPlayer && typeof this.ytPlayer.getCurrentTime === 'function'
-                        ? this.ytPlayer.getCurrentTime()
-                        : 0;
-                }
-                return this.videoElement.currentTime;
-            },
-
-            set currentTime(val) {
-                if (this.isYoutube) {
-                    if (this.ytPlayer && typeof this.ytPlayer.seekTo === 'function') {
-                        this.ytPlayer.seekTo(val, true);
-                        this.trigger('seeked');
-                    }
-                } else {
-                    this.videoElement.currentTime = val;
-                }
-            },
-
-            get duration() {
-                if (this.isYoutube) {
-                    return this.ytPlayer && typeof this.ytPlayer.getDuration === 'function'
-                        ? this.ytPlayer.getDuration()
-                        : 0;
-                }
-                return this.videoElement.duration;
-            },
-
-            get paused() {
-                if (this.isYoutube) {
-                    if (!this.ytPlayer || typeof this.ytPlayer.getPlayerState !== 'function') return true;
-                    const state = this.ytPlayer.getPlayerState();
-                    return state !== 1 && state !== 3; // 1 = tocando, 3 = buffering
-                }
-                return this.videoElement.paused;
-            },
-
-            get playbackRate() {
-                if (this.isYoutube) {
-                    return this.ytPlayer && typeof this.ytPlayer.getPlaybackRate === 'function'
-                        ? this.ytPlayer.getPlaybackRate()
-                        : 1;
-                }
-                return this.videoElement.playbackRate;
-            },
-
-            set playbackRate(val) {
-                if (this.isYoutube) {
-                    if (this.ytPlayer && typeof this.ytPlayer.setPlaybackRate === 'function') {
-                        this.ytPlayer.setPlaybackRate(val);
-                    }
-                } else {
-                    this.videoElement.playbackRate = val;
-                }
-            },
-
-            get src() {
-                return this.isYoutube ? 'youtube' : this.videoElement.src;
-            },
-
-            set src(val) {
-                if (!val) return;
-                const info = getVideoIdFromURL(val);
-                if (info.type === 'youtube') {
-                    loadYoutubePlayer(info.id);
-                } else {
-                    loadHtml5Video(val);
-                }
-            },
-
-            get style() {
-                const activeEl = this.isYoutube ? ytPlayerContainer : this.videoElement;
-                return activeEl ? activeEl.style : { transform: '' };
-            },
-
-            get clientWidth() {
-                const activeEl = this.isYoutube ? ytPlayerContainer : this.videoElement;
-                return activeEl ? activeEl.clientWidth : 0;
-            },
-
-            get clientHeight() {
-                const activeEl = this.isYoutube ? ytPlayerContainer : this.videoElement;
-                return activeEl ? activeEl.clientHeight : 0;
-            },
-
-            get videoWidth() {
-                return this.isYoutube ? 1280 : this.videoElement.videoWidth;
-            },
-
-            get videoHeight() {
-                return this.isYoutube ? 720 : this.videoElement.videoHeight;
-            }
-        };
-
-        appPlayer.init();
-        const video = appPlayer;
+        // ======== ELEMENTOS DO DOM ========
+        const video = document.getElementById('videoPlayer');
         const videoContainer = document.getElementById('videoContainer');
         const upload = document.getElementById('videoUpload');
         const videoTitleHint = document.getElementById('videoTitleHint');
@@ -1519,226 +1333,7 @@
             }
         };
 
-        function loadYoutubePlayer(videoId) {
-            if (!ytApiReady || typeof YT === 'undefined' || typeof YT.Player === 'undefined') {
-                setTimeout(() => loadYoutubePlayer(videoId), 100);
-                return;
-            }
 
-            appPlayer.isYoutube = true;
-            html5Video.style.display = 'none';
-            html5Video.pause();
-            ytPlayerContainer.style.display = 'block';
-            ytTouchOverlay.style.display = 'block';
-
-            // Ajusta o comportamento de cliques dependendo do zoom
-            if (scale > 1) {
-                ytTouchOverlay.style.pointerEvents = 'auto';
-            } else {
-                ytTouchOverlay.style.pointerEvents = 'none';
-            }
-
-            if (appPlayer.ytPlayer) {
-                try {
-                    appPlayer.ytPlayer.destroy();
-                } catch(e) { console.error("Erro ao destruir player do YouTube:", e); }
-                appPlayer.ytPlayer = null;
-            }
-
-            ytPlayerContainer.innerHTML = '';
-            const ytPlayerId = 'yt_player_inner_' + Date.now();
-            const innerDiv = document.createElement('div');
-            innerDiv.id = ytPlayerId;
-            innerDiv.style.width = '100%';
-            innerDiv.style.height = '100%';
-            ytPlayerContainer.appendChild(innerDiv);
-
-            const playerVars = {
-                'playsinline': 1,
-                'controls': 1,
-                'rel': 0,
-                'showinfo': 0,
-                'modestbranding': 1
-            };
-            if (window.location.origin && window.location.origin.startsWith('http')) {
-                playerVars.origin = window.location.origin;
-            }
-
-            appPlayer.ytPlayer = new YT.Player(ytPlayerId, {
-                height: '100%',
-                width: '100%',
-                videoId: videoId,
-                playerVars: playerVars,
-                events: {
-                    'onReady': (event) => {
-                        appPlayer.trigger('loadedmetadata');
-                        appPlayer.trigger('loadeddata');
-                        
-                        if (currentVideoId && videoHistory[currentVideoId]) {
-                            videoHistory[currentVideoId].duration = appPlayer.duration;
-                            saveHistoryToStorage();
-                        }
-                        
-                        const speed = parseFloat(speedSlider.value);
-                        if (speed !== 1) {
-                            appPlayer.playbackRate = speed;
-                        }
-                        
-                        if (currentAudioBuffer) {
-                            drawWaveform();
-                        }
-                    },
-                    'onStateChange': (event) => {
-                        if (event.data === 1) {
-                            appPlayer.trigger('play');
-                        } else if (event.data === 2 || event.data === 0) {
-                            appPlayer.trigger('pause');
-                        }
-                    },
-                    'onError': (event) => {
-                        appPlayer.trigger('error', event);
-                    }
-                }
-            });
-        }
-
-        function loadHtml5Video(src) {
-            appPlayer.isYoutube = false;
-            if (appPlayer.ytPlayer) {
-                try {
-                    appPlayer.ytPlayer.destroy();
-                } catch(e) {}
-                appPlayer.ytPlayer = null;
-            }
-            ytPlayerContainer.style.display = 'none';
-            ytTouchOverlay.style.display = 'none';
-            html5Video.style.display = 'block';
-
-            html5Video.src = src;
-            html5Video.load();
-        }
-
-        function getVideoIdFromURL(url) {
-            const ytRegex = /(?:v=|\/shorts\/|\/embed\/|\/v\/|youtu\.be\/|\/vi\/)([a-zA-Z0-9_-]{11})/;
-            const match = url.match(ytRegex);
-            if (match && match[1]) {
-                return { type: 'youtube', id: match[1] };
-            }
-            return { type: 'direct', id: url.replace(/[^a-zA-Z0-9]/g, '_') };
-        }
-
-        window.promptOpenURL = async function() {
-            const url = await appPrompt("Digite a URL do vídeo (MP4 direta ou YouTube):", "", "Abrir URL");
-            if (url) {
-                loadVideoFromURL(url.trim());
-            }
-        };
-
-        window.loadVideoFromURL = async function(url) {
-            if (!url) return;
-            
-            const info = getVideoIdFromURL(url);
-            let title = url;
-            let idKey = '';
-            
-            if (info.type === 'youtube') {
-                title = `YouTube: ${info.id}`;
-                idKey = `yt_${info.id}`;
-                
-                const panel = document.getElementById('waveformPanel');
-                if (panel) panel.style.display = 'none';
-                currentAudioBuffer = null;
-                waveformPoints = [];
-                
-                loadYoutubePlayer(info.id);
-            } else {
-                let finalSrc = url;
-                try {
-                    const parts = url.split('/');
-                    title = parts[parts.length - 1] || url;
-                } catch(e) {
-                    title = url;
-                }
-                idKey = `url_${info.id}`;
-                
-                loadHtml5Video(finalSrc);
-                loadAudioWaveformFromURL(finalSrc);
-            }
-            
-            currentVideoId = idKey;
-            thumbnailCaptured = false;
-            undoStack = [];
-            redoStack = [];
-            
-            if (videoHistory[currentVideoId]) {
-                markers = videoHistory[currentVideoId].markers || [];
-                videoHistory[currentVideoId].lastAccessed = Date.now();
-            } else {
-                markers = [];
-                videoHistory[currentVideoId] = {
-                    id: currentVideoId,
-                    title: title,
-                    originalUrl: url,
-                    lastAccessed: Date.now(),
-                    fileDate: Date.now(),
-                    isFavorite: false,
-                    markers: [],
-                    duration: 0
-                };
-            }
-            
-            editingStepId = null;
-            selectedLoops.clear();
-            isTraining = false;
-            isPlayRequested = false;
-            resetZoom();
-            saveHistoryToStorage();
-            syncChoreoNameInput();
-            renderLoops();
-            
-            videoTitleHint.textContent = `Ativo: ${title}`;
-            videoTitleHint.style.color = "var(--accent)";
-            videoTitleHint.style.fontWeight = "bold";
-            
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-        };
-
-
-
-        async function loadAudioWaveformFromURL(url) {
-            const panel = document.getElementById('waveformPanel');
-            const canvas = document.getElementById('waveformCanvas');
-            const loading = document.getElementById('waveformLoading');
-            
-            panel.style.display = 'block';
-            loading.style.display = 'flex';
-            loading.textContent = '⏳ Carregando áudio...';
-            
-            currentAudioBuffer = null;
-            waveformPoints = [];
-            drawWaveform();
-
-            try {
-                const response = await fetch(url);
-                if (!response.ok) throw new Error("HTTP error " + response.status);
-                const arrayBuffer = await response.arrayBuffer();
-                loading.textContent = '⏳ Processando áudio...';
-                
-                const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-                currentAudioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
-                audioCtx.close();
-                
-                generateWaveformPoints();
-                loading.style.display = 'none';
-                drawWaveform();
-            } catch (e) {
-                console.error("Erro ao decodificar áudio via URL (CORS ou rede):", e);
-                loading.textContent = '⚠️ Áudio indisponível para este vídeo';
-                setTimeout(() => {
-                    loading.style.display = 'none';
-                }, 3000);
-            }
-        }
 
         function syncCurrentVideoData() {
             if (!currentVideoId || !videoHistory[currentVideoId]) return;
@@ -1821,7 +1416,6 @@
 
         // --- CAPTURA DE MINIATURA AUTOMÁTICA (Corrigido para Android) ---
         function captureAndSaveThumbnail() {
-            if (appPlayer.isYoutube) return;
             if (thumbnailCaptured || !currentVideoId || !videoHistory[currentVideoId]) return;
 
             try {
@@ -3012,11 +2606,6 @@
                 return;
             }
 
-            if (appPlayer.isYoutube) {
-                btnAutoMark.textContent = '⚠️ Indisponível para YouTube';
-                setTimeout(() => { btnAutoMark.textContent = '🎵 Auto'; }, 3000);
-                return;
-            }
 
             if (!currentAudioBuffer && !currentFile) {
                 btnAutoMark.textContent = '⚠️ Áudio indisponível';
@@ -3225,14 +2814,8 @@
             // Quando zoom > 1: expande o wrapper para toda a largura da tela (sangra nas laterais)
             if (scale > 1) {
                 videoContainer.classList.add('is-zoomed');
-                if (appPlayer.isYoutube) {
-                    ytTouchOverlay.style.pointerEvents = 'auto';
-                }
             } else {
                 videoContainer.classList.remove('is-zoomed');
-                if (appPlayer.isYoutube) {
-                    ytTouchOverlay.style.pointerEvents = 'none';
-                }
             }
             const maxTx = (video.clientWidth * scale - videoContainer.clientWidth) / 2;
             const maxTy = (video.clientHeight * scale - videoContainer.clientHeight) / 2;
@@ -3657,13 +3240,6 @@
         renderStepButtons();
         setupWaveformInteraction();
 
-        // Se não tiver nenhum vídeo carregado ou se o último aberto for local (e não puder ser recarregado automaticamente),
-        // abre o vídeo do YouTube padrão.
-        if (currentVideoId && videoHistory[currentVideoId] && videoHistory[currentVideoId].originalUrl) {
-            loadVideoFromURL(videoHistory[currentVideoId].originalUrl);
-        } else {
-            loadVideoFromURL('https://www.youtube.com/shorts/JJuRNR0D8g8');
-        }
 
         requestAnimationFrame(checkLoop);
 
