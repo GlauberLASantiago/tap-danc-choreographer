@@ -1150,8 +1150,8 @@
         let redoStack = [];
         const MAX_UNDO_LIMIT = 50;
         let customSteps = {
-            L: ["Step", "Dig", "Toe", "Heel", "Brush", "Hop", "Stomp", "Shuffle ↑", "Shuffle ↓", "Scuff"],
-            R: ["Step", "Dig", "Toe", "Heel", "Brush", "Hop", "Stomp", "Shuffle ↑", "Shuffle ↓", "Scuff"]
+            L: ["Step", "Stamp", "Stomp", "Dig", "Toe", "Heel", "Brush", "Spank", "Shuffle ↑", "Shuffle ↓", "Hop", "Chug", "Scuff", "Click"],
+            R: ["Step", "Stamp", "Stomp", "Dig", "Toe", "Heel", "Brush", "Spank", "Shuffle ↑", "Shuffle ↓", "Hop", "Chug", "Scuff", "Click"]
         };
 
         let scale = 1;
@@ -1197,6 +1197,32 @@
                 const data = localStorage.getItem('loopDance_customSteps');
                 if (data) {
                     customSteps = JSON.parse(data);
+                    
+                    // Se o usuário tem a lista antiga (sem "Stamp", "Spank", "Chug" ou "Click"),
+                    // vamos injetá-los automaticamente nas posições corretas para atualizar o app.
+                    const newDefaults = ["Stamp", "Spank", "Chug", "Click"];
+                    ["L", "R"].forEach(side => {
+                        newDefaults.forEach(defStep => {
+                            if (!customSteps[side].includes(defStep)) {
+                                if (defStep === "Stamp") {
+                                    const idx = customSteps[side].indexOf("Stomp");
+                                    if (idx !== -1) customSteps[side].splice(idx, 0, "Stamp");
+                                    else customSteps[side].push("Stamp");
+                                } else if (defStep === "Spank") {
+                                    const idx = customSteps[side].indexOf("Brush");
+                                    if (idx !== -1) customSteps[side].splice(idx + 1, 0, "Spank");
+                                    else customSteps[side].push("Spank");
+                                } else if (defStep === "Chug") {
+                                    const idx = customSteps[side].indexOf("Hop");
+                                    if (idx !== -1) customSteps[side].splice(idx + 1, 0, "Chug");
+                                    else customSteps[side].push("Chug");
+                                } else {
+                                    customSteps[side].push(defStep);
+                                }
+                            }
+                        });
+                    });
+                    saveCustomSteps();
                 }
             } catch (e) {
                 console.error("Erro ao ler customSteps", e);
