@@ -9,9 +9,6 @@
     <link rel="icon"
         href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🩰</text></svg>">
 
-    <!-- YouTube Iframe Player API -->
-    <script src="https://www.youtube.com/iframe_api"></script>
-
     <!-- PWA Meta Tags -->
     <meta name="theme-color" content="#121212">
     <meta name="apple-mobile-web-app-capable" content="yes">
@@ -878,7 +875,7 @@
         };
 
         // Carrega o script do YouTube se ainda não foi carregado
-        if (!window.YT) {
+        if (typeof YT === 'undefined' || typeof YT.Player === 'undefined') {
             const tag = document.createElement('script');
             tag.src = "https://www.youtube.com/iframe_api";
             const firstScriptTag = document.getElementsByTagName('script')[0];
@@ -1498,7 +1495,7 @@
         };
 
         function loadYoutubePlayer(videoId) {
-            if (!ytApiReady) {
+            if (!ytApiReady || typeof YT === 'undefined' || typeof YT.Player === 'undefined') {
                 setTimeout(() => loadYoutubePlayer(videoId), 100);
                 return;
             }
