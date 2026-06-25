@@ -9,6 +9,9 @@
     <link rel="icon"
         href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🩰</text></svg>">
 
+    <!-- YouTube Iframe Player API -->
+    <script src="https://www.youtube.com/iframe_api"></script>
+
     <!-- PWA Meta Tags -->
     <meta name="theme-color" content="#121212">
     <meta name="apple-mobile-web-app-capable" content="yes">
@@ -768,6 +771,8 @@
                 <p class="scroll-hint" id="videoTitleHint" style="margin-bottom: 2px;">Ativo: Nenhum vídeo carregado</p>
                 <div class="video-wrapper" id="videoContainer">
                     <video id="videoPlayer" controls playsinline></video>
+                    <div id="ytPlayerContainer" style="display: none; width: 100%; aspect-ratio: 16 / 9; transform-origin: center center; transition: transform 0.1s ease-out;"></div>
+                    <div id="ytTouchOverlay" style="display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 8; background: transparent; cursor: pointer;"></div>
                     <!-- Floating step overlays (Left and Right) -->
                     <div id="stepOverlayLeft" style="position: absolute; bottom: 15px; left: 15px; transform: translate(0, 10px) scale(0.95); background: rgba(33, 150, 243, 0.85); border: 1.5px solid #2196F3; color: #fff; padding: 6px 14px; border-radius: 8px; font-weight: bold; font-size: 16px; pointer-events: none; opacity: 0; transition: opacity 0.15s ease, transform 0.15s ease; z-index: 10; display: flex; align-items: center; gap: 6px; box-shadow: 0 4px 10px rgba(0,0,0,0.5);">
                         <span>👣</span>
@@ -860,8 +865,185 @@
     </div>
 
     <script>
-        // ======== ELEMENTOS DO DOM ========
-        const video = document.getElementById('videoPlayer');
+        // ======== ELEMENTOS DO DOM E PLAYER UNIFICADO ========
+        const html5Video = document.getElementById('videoPlayer');
+        const ytPlayerContainer = document.getElementById('ytPlayerContainer');
+        const ytTouchOverlay = document.getElementById('ytTouchOverlay');
+
+        let ytApiReady = false;
+
+        // Callback da API do YouTube
+        window.onYouTubeIframeAPIReady = function() {
+            ytApiReady = true;
+        };
+
+        // Carrega o script do YouTube se ainda não foi carregado
+        if (!window.YT) {
+            const tag = document.createElement('script');
+            tag.src = "https://www.youtube.com/iframe_api";
+            const firstScriptTag = document.getElementsByTagName('script')[0];
+            firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+        } else {
+            ytApiReady = true;
+        }
+
+        const appPlayer = {
+            isYoutube: false,
+            ytPlayer: null,
+            videoElement: html5Video,
+            listeners: {},
+
+            init() {
+                const events = ['loadedmetadata', 'loadeddata', 'seeked', 'timeupdate', 'play', 'pause', 'error'];
+                events.forEach(event => {
+                    this.videoElement.addEventListener(event, (e) => {
+                        if (!this.isYoutube) {
+                            this.trigger(event, e);
+                        }
+                    });
+                });
+
+                // Clique no overlay de toque do YouTube para pausar/reproduzir
+                ytTouchOverlay.addEventListener('click', (e) => {
+                    if (typeof isDragging !== 'undefined' && isDragging) return;
+                    if (this.paused) {
+                        this.play();
+                    } else {
+                        this.pause();
+                    }
+                });
+            },
+
+            addEventListener(event, callback) {
+                if (!this.listeners[event]) this.listeners[event] = [];
+                this.listeners[event].push(callback);
+            },
+
+            trigger(event, data) {
+                if (this.listeners[event]) {
+                    this.listeners[event].forEach(cb => {
+                        try { cb(data); } catch(err) { console.error("Erro no callback do evento " + event, err); }
+                    });
+                }
+            },
+
+            play() {
+                if (this.isYoutube) {
+                    if (this.ytPlayer && typeof this.ytPlayer.playVideo === 'function') {
+                        this.ytPlayer.playVideo();
+                    }
+                } else {
+                    return this.videoElement.play();
+                }
+            },
+
+            pause() {
+                if (this.isYoutube) {
+                    if (this.ytPlayer && typeof this.ytPlayer.pauseVideo === 'function') {
+                        this.ytPlayer.pauseVideo();
+                    }
+                } else {
+                    this.videoElement.pause();
+                }
+            },
+
+            load() {
+                if (!this.isYoutube) {
+                    this.videoElement.load();
+                }
+            },
+
+            get currentTime() {
+                if (this.isYoutube) {
+                    return this.ytPlayer && typeof this.ytPlayer.getCurrentTime === 'function'
+                        ? this.ytPlayer.getCurrentTime()
+                        : 0;
+                }
+                return this.videoElement.currentTime;
+            },
+
+            set currentTime(val) {
+                if (this.isYoutube) {
+                    if (this.ytPlayer && typeof this.ytPlayer.seekTo === 'function') {
+                        this.ytPlayer.seekTo(val, true);
+                        this.trigger('seeked');
+                    }
+                } else {
+                    this.videoElement.currentTime = val;
+                }
+            },
+
+            get duration() {
+                if (this.isYoutube) {
+                    return this.ytPlayer && typeof this.ytPlayer.getDuration === 'function'
+                        ? this.ytPlayer.getDuration()
+                        : 0;
+                }
+                return this.videoElement.duration;
+            },
+
+            get paused() {
+                if (this.isYoutube) {
+                    if (!this.ytPlayer || typeof this.ytPlayer.getPlayerState !== 'function') return true;
+                    const state = this.ytPlayer.getPlayerState();
+                    return state !== 1 && state !== 3; // 1 = tocando, 3 = buffering
+                }
+                return this.videoElement.paused;
+            },
+
+            get playbackRate() {
+                if (this.isYoutube) {
+                    return this.ytPlayer && typeof this.ytPlayer.getPlaybackRate === 'function'
+                        ? this.ytPlayer.getPlaybackRate()
+                        : 1;
+                }
+                return this.videoElement.playbackRate;
+            },
+
+            set playbackRate(val) {
+                if (this.isYoutube) {
+                    if (this.ytPlayer && typeof this.ytPlayer.setPlaybackRate === 'function') {
+                        this.ytPlayer.setPlaybackRate(val);
+                    }
+                } else {
+                    this.videoElement.playbackRate = val;
+                }
+            },
+
+            get src() {
+                return this.isYoutube ? 'youtube' : this.videoElement.src;
+            },
+
+            set src(val) {
+                // Configurado dinamicamente
+            },
+
+            get style() {
+                const activeEl = this.isYoutube ? ytPlayerContainer : this.videoElement;
+                return activeEl ? activeEl.style : { transform: '' };
+            },
+
+            get clientWidth() {
+                const activeEl = this.isYoutube ? ytPlayerContainer : this.videoElement;
+                return activeEl ? activeEl.clientWidth : 0;
+            },
+
+            get clientHeight() {
+                const activeEl = this.isYoutube ? ytPlayerContainer : this.videoElement;
+                return activeEl ? activeEl.clientHeight : 0;
+            },
+
+            get videoWidth() {
+                return this.isYoutube ? 1280 : this.videoElement.videoWidth;
+            },
+
+            get videoHeight() {
+                return this.isYoutube ? 720 : this.videoElement.videoHeight;
+            }
+        };
+
+        appPlayer.init();
+        const video = appPlayer;
         const videoContainer = document.getElementById('videoContainer');
         const upload = document.getElementById('videoUpload');
         const videoTitleHint = document.getElementById('videoTitleHint');
@@ -1149,16 +1331,7 @@
         let videoHistory = {};
         let currentVideoId = null;
 
-        const invidiousInstances = [
-            'https://yewtu.be',
-            'https://invidious.projectsegfau.lt',
-            'https://invidious.nerd.net',
-            'https://inv.tux.im',
-            'https://invidio.xamh.de'
-        ];
-        let currentInstanceIdx = 0;
-        let isYtFallbackMode = false;
-        let ytIdUnderLoading = '';
+
 
         function loadHistoryFromStorage() {
             try {
@@ -1324,40 +1497,99 @@
             }
         };
 
-        async function fetchYoutubeDirectLink(videoId) {
-            const apiInstances = [
-                'https://api.cobalt.tools/api/json',
-                'https://co.wuk.sh/api/json'
-            ];
-            
-            const ytUrl = `https://www.youtube.com/watch?v=${videoId}`;
-            
-            for (const api of apiInstances) {
-                try {
-                    const response = await fetch(api, {
-                        method: 'POST',
-                        headers: {
-                            'Accept': 'application/json',
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({
-                            url: ytUrl,
-                            vQuality: '720',
-                            filenamePattern: 'basic'
-                        })
-                    });
-                    
-                    if (response.ok) {
-                        const data = await response.json();
-                        if (data && data.url) {
-                            return data.url;
-                        }
-                    }
-                } catch (err) {
-                    console.warn(`Cobalt API falhou no endpoint ${api}:`, err);
-                }
+        function loadYoutubePlayer(videoId) {
+            if (!ytApiReady) {
+                setTimeout(() => loadYoutubePlayer(videoId), 100);
+                return;
             }
-            return null;
+
+            appPlayer.isYoutube = true;
+            html5Video.style.display = 'none';
+            html5Video.pause();
+            ytPlayerContainer.style.display = 'block';
+            ytTouchOverlay.style.display = 'block';
+
+            // Ajusta o comportamento de cliques dependendo do zoom
+            if (scale > 1) {
+                ytTouchOverlay.style.pointerEvents = 'auto';
+            } else {
+                ytTouchOverlay.style.pointerEvents = 'none';
+            }
+
+            if (appPlayer.ytPlayer) {
+                try {
+                    appPlayer.ytPlayer.destroy();
+                } catch(e) { console.error("Erro ao destruir player do YouTube:", e); }
+                appPlayer.ytPlayer = null;
+            }
+
+            ytPlayerContainer.innerHTML = '';
+            const ytPlayerId = 'yt_player_inner_' + Date.now();
+            const innerDiv = document.createElement('div');
+            innerDiv.id = ytPlayerId;
+            innerDiv.style.width = '100%';
+            innerDiv.style.height = '100%';
+            ytPlayerContainer.appendChild(innerDiv);
+
+            appPlayer.ytPlayer = new YT.Player(ytPlayerId, {
+                height: '100%',
+                width: '100%',
+                videoId: videoId,
+                playerVars: {
+                    'playsinline': 1,
+                    'controls': 1,
+                    'rel': 0,
+                    'showinfo': 0,
+                    'modestbranding': 1,
+                    'origin': window.location.origin
+                },
+                events: {
+                    'onReady': (event) => {
+                        appPlayer.trigger('loadedmetadata');
+                        appPlayer.trigger('loadeddata');
+                        
+                        if (currentVideoId && videoHistory[currentVideoId]) {
+                            videoHistory[currentVideoId].duration = appPlayer.duration;
+                            saveHistoryToStorage();
+                        }
+                        
+                        const speed = parseFloat(speedSlider.value);
+                        if (speed !== 1) {
+                            appPlayer.playbackRate = speed;
+                        }
+                        
+                        if (currentAudioBuffer) {
+                            drawWaveform();
+                        }
+                    },
+                    'onStateChange': (event) => {
+                        if (event.data === 1) {
+                            appPlayer.trigger('play');
+                        } else if (event.data === 2 || event.data === 0) {
+                            appPlayer.trigger('pause');
+                        }
+                    },
+                    'onError': (event) => {
+                        appPlayer.trigger('error', event);
+                    }
+                }
+            });
+        }
+
+        function loadHtml5Video(src) {
+            appPlayer.isYoutube = false;
+            if (appPlayer.ytPlayer) {
+                try {
+                    appPlayer.ytPlayer.destroy();
+                } catch(e) {}
+                appPlayer.ytPlayer = null;
+            }
+            ytPlayerContainer.style.display = 'none';
+            ytTouchOverlay.style.display = 'none';
+            html5Video.style.display = 'block';
+
+            html5Video.src = src;
+            html5Video.load();
         }
 
         function getVideoIdFromURL(url) {
@@ -1380,49 +1612,21 @@
             if (!url) return;
             
             const info = getVideoIdFromURL(url);
-            let finalSrc = url;
             let title = url;
             let idKey = '';
             
             if (info.type === 'youtube') {
-                isYtFallbackMode = true;
-                ytIdUnderLoading = info.id;
-                currentInstanceIdx = 0;
-                
-                videoTitleHint.textContent = `Carregando vídeo do YouTube: ${info.id}...`;
-                
-                // Tenta Cobalt primeiro
-                let directLink = await fetchYoutubeDirectLink(info.id);
-                if (directLink) {
-                    finalSrc = directLink;
-                    isYtFallbackMode = false;
-                } else {
-                    // Fallback para Invidious
-                    finalSrc = `${invidiousInstances[0]}/latest_version?id=${info.id}&itag=18`;
-                }
-                
                 title = `YouTube: ${info.id}`;
                 idKey = `yt_${info.id}`;
                 
-                // Tenta carregar o título real via API do Invidious
-                fetch(`${invidiousInstances[0]}/api/v1/videos/${info.id}`)
-                    .then(res => res.json())
-                    .then(data => {
-                        if (data && data.title) {
-                            if (videoHistory[idKey]) {
-                                videoHistory[idKey].title = data.title;
-                                if (currentVideoId === idKey) {
-                                    videoTitleHint.textContent = `Ativo: ${data.title}`;
-                                }
-                                saveHistoryToStorage();
-                            }
-                        }
-                    })
-                    .catch(err => console.log("Não foi possível buscar o título do YouTube", err));
+                const panel = document.getElementById('waveformPanel');
+                if (panel) panel.style.display = 'none';
+                currentAudioBuffer = null;
+                waveformPoints = [];
+                
+                loadYoutubePlayer(info.id);
             } else {
-                isYtFallbackMode = false;
-                ytIdUnderLoading = '';
-                finalSrc = url;
+                let finalSrc = url;
                 try {
                     const parts = url.split('/');
                     title = parts[parts.length - 1] || url;
@@ -1430,10 +1634,10 @@
                     title = url;
                 }
                 idKey = `url_${info.id}`;
+                
+                loadHtml5Video(finalSrc);
+                loadAudioWaveformFromURL(finalSrc);
             }
-            
-            video.src = finalSrc;
-            video.load();
             
             currentVideoId = idKey;
             thumbnailCaptured = false;
@@ -1457,8 +1661,6 @@
                 };
             }
             
-            loadAudioWaveformFromURL(finalSrc);
-            
             editingStepId = null;
             selectedLoops.clear();
             isTraining = false;
@@ -1474,6 +1676,8 @@
             
             window.scrollTo({ top: 0, behavior: 'smooth' });
         };
+
+
 
         async function loadAudioWaveformFromURL(url) {
             const panel = document.getElementById('waveformPanel');
@@ -1591,6 +1795,7 @@
 
         // --- CAPTURA DE MINIATURA AUTOMÁTICA (Corrigido para Android) ---
         function captureAndSaveThumbnail() {
+            if (appPlayer.isYoutube) return;
             if (thumbnailCaptured || !currentVideoId || !videoHistory[currentVideoId]) return;
 
             try {
@@ -2982,8 +3187,14 @@
             // Quando zoom > 1: expande o wrapper para toda a largura da tela (sangra nas laterais)
             if (scale > 1) {
                 videoContainer.classList.add('is-zoomed');
+                if (appPlayer.isYoutube) {
+                    ytTouchOverlay.style.pointerEvents = 'auto';
+                }
             } else {
                 videoContainer.classList.remove('is-zoomed');
+                if (appPlayer.isYoutube) {
+                    ytTouchOverlay.style.pointerEvents = 'none';
+                }
             }
             const maxTx = (video.clientWidth * scale - videoContainer.clientWidth) / 2;
             const maxTy = (video.clientHeight * scale - videoContainer.clientHeight) / 2;
@@ -3396,23 +3607,10 @@
             }
         });
 
-        // Video error listener for fallback instances
+        // Video error listener
         video.addEventListener('error', (e) => {
-            if (isYtFallbackMode && ytIdUnderLoading) {
-                currentInstanceIdx++;
-                if (currentInstanceIdx < invidiousInstances.length) {
-                    console.warn(`Tentando próximo servidor Invidious: ${invidiousInstances[currentInstanceIdx]}`);
-                    const newSrc = `${invidiousInstances[currentInstanceIdx]}/latest_version?id=${ytIdUnderLoading}&itag=18`;
-                    video.src = newSrc;
-                    video.load();
-                    loadAudioWaveformFromURL(newSrc);
-                } else {
-                    console.error("Todos os servidores Invidious falharam.");
-                    showChoreoHint("❌ Não foi possível carregar o vídeo do YouTube", "#f44336");
-                    isYtFallbackMode = false;
-                    ytIdUnderLoading = '';
-                }
-            }
+            console.error("Erro ao carregar o vídeo:", e);
+            showChoreoHint("❌ Erro ao carregar o vídeo", "#f44336");
         });
 
         // Inicialização
